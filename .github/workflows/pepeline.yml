@@ -1,0 +1,71 @@
+name: CI/CD Pipeline Vue.js
+
+# Esto equivale al "only: main" de GitLab [cite: 253]
+on:
+  push:
+    branches: ["main"]
+
+jobs:
+  # --- ETAPA 1: BUILD (Construcción) [cite: 63, 84] ---
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Clonar el repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js (Según tu package.json requiere >=18)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: "npm"
+
+      - name: Instalar dependencias
+        run: npm install
+
+      - name: Crear el ejecutable (Build)
+        run: npm run build
+
+      # En GitHub, para pasar archivos al siguiente trabajo, hay que "subirlos"
+      - name: Guardar artefacto (dist)
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-files
+          path: dist/
+          retention-days: 7
+
+  # --- ETAPA 2: TEST (Pruebas) [cite: 64, 115] ---
+  test:
+    needs: build # Espera a que termine 'build'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Ejecutar Test Simulado
+        # Aquí pones el echo que pide la actividad [cite: 116]
+        run: echo "Hola Test Executat de JOAN PEDRO"
+
+  # --- ETAPA 3: DEPLOY (Despliegue) [cite: 149, 233] ---
+  deploy:
+    needs: [build, test] # Espera a que terminen 'build' y 'test'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Descargar artefacto compilado
+        uses: actions/download-artifact@v4
+        with:
+          name: dist-files
+          path: dist/
+
+      - name: Desplegar en AWS con Rsync
+        run: |
+          # Configurar clave SSH
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+
+          # Evitar preguntas de confirmación de host (StrictHostKeyChecking no) [cite: 249]
+          echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config
+
+          # Sincronizar archivos (rsync)
+          # Nota: Ajusta la ruta /var/www/... según tu configuración de Nginx [cite: 240]
+          rsync -rav --delete dist/ ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/var/www/html/dist
