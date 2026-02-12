@@ -1,71 +1,45 @@
-name: CI/CD Pipeline Vue.js
+name: CI Pipeline (Build y Test)
 
-# Esto equivale al "only: main" de GitLab [cite: 253]
+# Se ejecuta al hacer push a la rama principal
 on:
   push:
     branches: ["main"]
 
 jobs:
-  # --- ETAPA 1: BUILD (Construcción) [cite: 63, 84] ---
-  build:
+  # --- ETAPA 1: BUILD (Compilación) ---
+  build-job:
     runs-on: ubuntu-latest
-
     steps:
       - name: Clonar el repositorio
         uses: actions/checkout@v4
 
-      - name: Configurar Node.js (Según tu package.json requiere >=18)
+      - name: Configurar Node.js v18
         uses: actions/setup-node@v4
         with:
           node-version: "18"
           cache: "npm"
 
-      - name: Instalar dependencias
-        run: npm install
+      - name: Instal·lar les dependències
+        # Equivalente a 'npm install --progress=false' del Word
+        run: npm install --no-progress
 
-      - name: Crear el ejecutable (Build)
+      - name: Crear l'executable (Build)
+        # Ejecuta 'npm run build' para generar la carpeta 'dist'
         run: npm run build
 
-      # En GitHub, para pasar archivos al siguiente trabajo, hay que "subirlos"
+      # Guardamos el artefacto compilado por si se necesita revisar
       - name: Guardar artefacto (dist)
         uses: actions/upload-artifact@v4
         with:
-          name: dist-files
+          name: compilado-dist
           path: dist/
           retention-days: 7
 
-  # --- ETAPA 2: TEST (Pruebas) [cite: 64, 115] ---
-  test:
-    needs: build # Espera a que termine 'build'
+  # --- ETAPA 2: TEST (Pruebas simuladas) ---
+  test-job:
+    needs: build-job # No empieza hasta que el build termine bien
     runs-on: ubuntu-latest
-
     steps:
-      - name: Ejecutar Test Simulado
-        # Aquí pones el echo que pide la actividad [cite: 116]
+      - name: Executar test simulat
+        # Mensaje personalizado según la actividad del documento
         run: echo "Hola Test Executat de JOAN PEDRO"
-
-  # --- ETAPA 3: DEPLOY (Despliegue) [cite: 149, 233] ---
-  deploy:
-    needs: [build, test] # Espera a que terminen 'build' y 'test'
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Descargar artefacto compilado
-        uses: actions/download-artifact@v4
-        with:
-          name: dist-files
-          path: dist/
-
-      - name: Desplegar en AWS con Rsync
-        run: |
-          # Configurar clave SSH
-          mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-
-          # Evitar preguntas de confirmación de host (StrictHostKeyChecking no) [cite: 249]
-          echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config
-
-          # Sincronizar archivos (rsync)
-          # Nota: Ajusta la ruta /var/www/... según tu configuración de Nginx [cite: 240]
-          rsync -rav --delete dist/ ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/var/www/html/dist
