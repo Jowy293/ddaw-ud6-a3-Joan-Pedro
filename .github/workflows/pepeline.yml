@@ -1,6 +1,6 @@
-name: CI Pipeline (Build y Test)
+name: CI/CD Pipeline (Build, Test y Deploy)
 
-# Se ejecuta al hacer push a la rama principal
+# Se ejecuta al hacer push a la rama principal (main)
 on:
   push:
     branches: ["main"]
@@ -11,35 +11,64 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Clonar el repositorio
-        uses: actions/checkout@v4
+        [cite_start]uses: actions/checkout@v4 [cite: 1]
 
       - name: Configurar Node.js v18
         uses: actions/setup-node@v4
         with:
-          node-version: "18"
+          [cite_start]node-version: "18" [cite: 2]
           cache: "npm"
 
       - name: Instal·lar les dependències
-        # Equivalente a 'npm install --progress=false' del Word
-        run: npm install --no-progress
+        [cite_start]run: npm install --progress=false [cite: 1]
 
       - name: Crear l'executable (Build)
-        # Ejecuta 'npm run build' para generar la carpeta 'dist'
-        run: npm run build
+        [cite_start]run: npm run build [cite: 1, 2]
 
-      # Guardamos el artefacto compilado por si se necesita revisar
+      # Guardamos el artefacto compilado para el despliegue 
       - name: Guardar artefacto (dist)
         uses: actions/upload-artifact@v4
         with:
           name: compilado-dist
-          path: dist/
+          path: dist
           retention-days: 7
 
   # --- ETAPA 2: TEST (Pruebas simuladas) ---
   test-job:
-    needs: build-job # No empieza hasta que el build termine bien
+    needs: build-job
     runs-on: ubuntu-latest
     steps:
       - name: Executar test simulat
-        # Mensaje personalizado según la actividad del documento
+        # Personalizado para Joan y Pedro como pide la actividad 
         run: echo "Hola Test Executat de JOAN PEDRO"
+
+  # --- ETAPA 3: DEPLOY (Entrega Continuada) ---
+  deploy-job:
+    needs: test-job
+    runs-on: ubuntu-latest
+    # Solo se ejecuta si estamos en la rama main 
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Descargar el artefacto (dist)
+        uses: actions/download-artifact@v4
+        with:
+          name: compilado-dist
+          path: dist
+
+      - name: Configurar SSH y desplegar con rsync
+        run: |
+          # Instalamos las herramientas necesarias 
+          sudo apt-get update && sudo apt-get install -y rsync openssh-client
+          
+          # Configuramos la clave privada usando el nombre KEY_SSH
+          mkdir -p ~/.ssh
+          echo "${{ secrets.KEY_SSH }}" > ~/.ssh/id_dsa
+          chmod 600 ~/.ssh/id_dsa
+          
+          # Desactivamos la comprobación de host para evitar bloqueos 
+          echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config
+          
+          # Sincronizamos con rsync usando los datos proporcionados 
+          # Usuario: deployer | Host: 18.215.166.106
+          rsync -rav --delete dist/ deployer@18.215.166.106:/var/www/001-example.com/html/dist
